@@ -1,0 +1,93 @@
+# Docker Sandboxes kit for the nginx-golang sample.
+#
+# Bring-up in one command:
+#   sbx create --kit ./.sbx shell .
+#
+# After the sandbox is created, the tunnel URL is written to /tmp/tunnel.log
+# inside the devcontainer. Read it with:
+#   sbx exec <sandbox-name> -- docker exec $(sbx exec <sandbox-name> -- docker ps --filter label=devcontainer.local_folder -q) cat /tmp/tunnel.log
+#
+# The wrapper script scripts/sandbox-up.sh takes care of all of this.
+#
+# Kits are experimental. Format may change: https://docs.docker.com/ai/sandboxes/customize/
+
+schemaVersion: "2"
+kind: mixin
+name: nginx-golang-devcontainer
+displayName: "nginx-golang devcontainer bring-up"
+description: |
+  Installs the devcontainer CLI inside the sandbox, then builds and starts the
+  devcontainer defined in .devcontainer/devcontainer.json against the mounted
+  workspace. The devcontainer itself installs the `code` CLI and launches
+  `code tunnel` so the sample can be edited from vscode.dev or VS Code Desktop.
+
+environment:
+  variables:
+    # Marker other tooling can read to detect the kit-driven path.
+    SBX_KIT_MODE: "1"
+
+caps:
+  network:
+    # Egress allow-list enforced by the sandbox's HTTP proxy. Covers everything
+    # the install steps and the devcontainer build need to reach.
+    allow:
+      # npm registry + Node downloads (devcontainer CLI, in-container npm)
+      - "registry.npmjs.org:443"
+      - "nodejs.org:443"
+
+      # Container registries for the devcontainer base image and features
+      - "mcr.microsoft.com:443"
+      - "*.data.mcr.microsoft.com:443"
+      - "ghcr.io:443"
+      - "*.pkg.github.com:443"
+      - "registry-1.docker.io:443"
+      - "auth.docker.io:443"
+      - "production.cloudflare.docker.com:443"
+
+      # GitHub (feature scripts fetched from raw.githubusercontent.com,
+      # tunnel device-code auth against github.com)
+      - "github.com:443"
+      - "api.github.com:443"
+      - "objects.githubusercontent.com:443"
+      - "codeload.github.com:443"
+      - "raw.githubusercontent.com:443"
+
+      # VS Code CLI download (used by the devcontainer's postCreateCommand)
+      - "code.visualstudio.com:443"
+      - "update.code.visualstudio.com:443"
+      - "vscode.download.prss.microsoft.com:443"
+      - "*.vo.msecnd.net:443"
+      - "*.vscode-cdn.net:443"
+
+      # VS Code Server tunnel service (used by `code tunnel`)
+      - "vscode.dev:443"
+      - "*.tunnels.api.visualstudio.com:443"
+      - "global.rel.tunnels.api.visualstudio.com:443"
+      - "marketplace.visualstudio.com:443"
+
+      # golangci-lint installer (optional part of the Go devcontainer feature)
+      - "golangci-lint.run:443"
+
+      # Go toolchain download (used by the Go devcontainer feature at build time)
+      - "go.googlesource.com:443"
+      - "go.dev:443"
+      - "dl.google.com:443"
+
+      # Go module proxy (used by `go` at runtime once the toolchain is installed)
+      - "proxy.golang.org:443"
+      - "sum.golang.org:443"
+      - "storage.googleapis.com:443"
+
+      # Debian package mirrors (apt in the devcontainer feature installs)
+      - "deb.debian.org:80"
+      - "deb.debian.org:443"
+      - "security.debian.org:80"
+      - "security.debian.org:443"
+
+commands:
+  install:
+    - description: "Install the devcontainer CLI"
+      command: "sudo npm install -g @devcontainers/cli"
+      # `devcontainer up` is *not* run here: kit install commands fire as
+      # started-hooks, before the sandbox's Docker daemon is ready. The wrapper
+      # script `scripts/sandbox-up.sh` runs it via `sbx exec` after creation.
