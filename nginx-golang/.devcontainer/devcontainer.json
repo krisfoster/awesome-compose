@@ -1,0 +1,47 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/docker-in-docker
+{
+	"name": "nginx-golang",
+	"image": "mcr.microsoft.com/devcontainers/base:bullseye",
+
+	"features": {
+		// Nested Docker daemon so `docker compose up` works inside the devcontainer
+		// without touching the host (or, when running under sbx, the sandbox) daemon.
+		"ghcr.io/devcontainers/features/docker-in-docker:2": {
+			"version": "latest",
+			"enableNonRootDocker": "true",
+			"moby": "true"
+		},
+		// Go toolchain: gopls, `go test`, `go build` for editing the backend service.
+		"ghcr.io/devcontainers/features/go:1": {
+			"version": "latest"
+		}
+	},
+
+	// Surface the proxy port so VS Code (any client, tunnel or Desktop) shows a
+	// clickable forward when `docker compose up` is running.
+	"forwardPorts": [80],
+
+	// Persist the `code tunnel` auth token across sandbox rebuilds so first-run
+	// device-code auth is not repeated every time.
+	"mounts": [
+		"source=nginx-golang-vscode-cli,target=/home/vscode/.vscode-cli,type=volume"
+	],
+
+	// Install the standalone `code` CLI (used by `code tunnel`).
+	"postCreateCommand": "curl -Lk 'https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-x64' -o /tmp/code.tar.gz && sudo tar -xzf /tmp/code.tar.gz -C /usr/local/bin && sudo chmod +x /usr/local/bin/code && rm /tmp/code.tar.gz",
+
+	// Start the tunnel in the background on every container start. First run is
+	// interactive (device-code auth); check the log to find the URL:
+	//   sbx exec <name> -- cat /tmp/tunnel.log
+	"postStartCommand": "nohup code tunnel --accept-server-license-terms --name \"${SANDBOX_VM_ID:-nginx-golang}\" > /tmp/tunnel.log 2>&1 &",
+
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"golang.go",
+				"ms-azuretools.vscode-docker"
+			]
+		}
+	}
+}

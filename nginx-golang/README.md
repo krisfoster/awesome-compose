@@ -291,3 +291,74 @@ and manifests are unaffected):
 ```
 $ docker desktop kubernetes reset-cluster
 ```
+
+## Develop this sample in an isolated sandbox
+
+If you want to poke at the code (or turn an AI agent loose on it) without
+letting anything touch your host, this repo ships a
+[Docker Sandboxes](https://docs.docker.com/ai/sandboxes/) kit that spins up a
+microVM, brings up the devcontainer inside it, and exposes a
+[VS Code tunnel](https://code.visualstudio.com/docs/remote/tunnels) URL you can
+open in a browser or attach VS Code Desktop to.
+
+Nesting when the sandbox is up:
+
+```
+host  ->  sbx microVM  ->  devcontainer (Debian + Go + DinD)  ->  `code tunnel`
+                                                              \-> `docker compose up`
+```
+
+The full recipe lives in [`.sbx/spec.yaml`](.sbx/spec.yaml) (the sandbox kit)
+and [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) (what
+the devcontainer looks like once it's inside).
+
+Prerequisites: Docker Desktop with Docker Sandboxes enabled and the `sbx` CLI
+on your `PATH`. See the [get-started guide](https://docs.docker.com/ai/sandboxes/get-started/).
+
+### Bring it up
+
+```
+$ ./scripts/sandbox-up.sh
+```
+
+The script creates a sandbox named `nginx-golang`, loads the kit, and waits for
+the tunnel URL. First run only, `code tunnel` prints a GitHub device-code prompt
+into the tunnel log; tail it to complete auth:
+
+```
+$ sbx exec nginx-golang -- docker exec <devcontainer-id> cat /tmp/tunnel.log
+```
+
+Once authenticated, the log contains a `https://vscode.dev/tunnel/...` URL. The
+auth token is persisted in a named volume, so subsequent starts skip the prompt.
+
+### Work inside the sandbox
+
+Open the tunnel URL. You get full VS Code, running inside the devcontainer,
+running inside the sandbox. In a terminal:
+
+```
+$ docker compose up
+```
+
+VS Code's port panel picks up the forwarded proxy port and offers a browser
+preview. Editing Go code triggers gopls in the container; nothing on your host
+is touched.
+
+### Tear it down
+
+```
+$ sbx rm --force nginx-golang
+```
+
+### Notes
+
+- The devcontainer is DinD-based, so the sample runs three layers deep (host
+  Docker &rarr; sandbox Docker &rarr; devcontainer's inner Docker). Fine for a
+  small sample, worth knowing if you push it hard.
+- The sandbox kit uses `schemaVersion: "2"`. Kit format is
+  [experimental](https://docs.docker.com/ai/sandboxes/customize/) and may
+  change; the shell script is the source of truth for what the kit does.
+- Egress from the sandbox goes through Docker's HTTP proxy and is restricted to
+  the domains declared in `caps.network.allow`. If a devcontainer feature you
+  add needs a new host, add it there.
