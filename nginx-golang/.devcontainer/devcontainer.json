@@ -28,8 +28,10 @@
 		"source=nginx-golang-vscode-cli,target=/home/vscode/.vscode-cli,type=volume"
 	],
 
-	// Install the standalone `code` CLI (used by `code tunnel`).
-	"postCreateCommand": "curl -Lk 'https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-x64' -o /tmp/code.tar.gz && sudo tar -xzf /tmp/code.tar.gz -C /usr/local/bin && sudo chmod +x /usr/local/bin/code && rm /tmp/code.tar.gz",
+	// Install the standalone `code` CLI (used by `code tunnel`). The Alpine
+	// variant is a statically linked musl binary and runs fine on Debian too;
+	// the CDN only ships an ARM build under the alpine name.
+	"postCreateCommand": "arch=$(dpkg --print-architecture); case \"$arch\" in amd64) v=x64;; arm64) v=arm64;; *) echo \"unsupported arch: $arch\" >&2; exit 1;; esac; curl -Lk \"https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-$v\" -o /tmp/code.tar.gz && sudo tar -xzf /tmp/code.tar.gz -C /usr/local/bin && sudo chmod +x /usr/local/bin/code && rm /tmp/code.tar.gz",
 
 	// Start the tunnel in the background on every container start. First run is
 	// interactive (device-code auth); check the log to find the URL:

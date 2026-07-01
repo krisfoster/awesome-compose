@@ -40,6 +40,21 @@ sbx create \
 	shell "$REPO_ROOT"
 
 echo
+echo "==> Waiting for the sandbox's Docker daemon to be ready"
+for _ in $(seq 1 30); do
+	if sbx exec "$SANDBOX_NAME" -- docker info >/dev/null 2>&1; then
+		break
+	fi
+	sleep 1
+done
+
+echo "==> Bringing up the devcontainer (first run pulls the base image)"
+sbx exec "$SANDBOX_NAME" -- \
+	devcontainer up \
+		--workspace-folder "$REPO_ROOT" \
+		--remove-existing-container
+
+echo
 echo "==> Locating the devcontainer inside the sandbox"
 DEVCONTAINER_ID="$(
 	sbx exec "$SANDBOX_NAME" -- \
@@ -48,7 +63,7 @@ DEVCONTAINER_ID="$(
 
 if [ -z "${DEVCONTAINER_ID:-}" ]; then
 	echo "error: no devcontainer found in sandbox '$SANDBOX_NAME'." >&2
-	echo "       Check kit install logs with: sbx exec $SANDBOX_NAME -- journalctl --user -e" >&2
+	echo "       Check logs with: sbx exec $SANDBOX_NAME -- journalctl --user -e" >&2
 	exit 1
 fi
 

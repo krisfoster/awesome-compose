@@ -52,7 +52,28 @@ caps:
       - "codeload.github.com:443"
       - "raw.githubusercontent.com:443"
 
-      # Go module proxy (used by the Go devcontainer feature)
+      # VS Code CLI download (used by the devcontainer's postCreateCommand)
+      - "code.visualstudio.com:443"
+      - "update.code.visualstudio.com:443"
+      - "vscode.download.prss.microsoft.com:443"
+      - "*.vo.msecnd.net:443"
+      - "*.vscode-cdn.net:443"
+
+      # VS Code Server tunnel service (used by `code tunnel`)
+      - "vscode.dev:443"
+      - "*.tunnels.api.visualstudio.com:443"
+      - "global.rel.tunnels.api.visualstudio.com:443"
+      - "marketplace.visualstudio.com:443"
+
+      # golangci-lint installer (optional part of the Go devcontainer feature)
+      - "golangci-lint.run:443"
+
+      # Go toolchain download (used by the Go devcontainer feature at build time)
+      - "go.googlesource.com:443"
+      - "go.dev:443"
+      - "dl.google.com:443"
+
+      # Go module proxy (used by `go` at runtime once the toolchain is installed)
       - "proxy.golang.org:443"
       - "sum.golang.org:443"
       - "storage.googleapis.com:443"
@@ -67,6 +88,6 @@ commands:
   install:
     - description: "Install the devcontainer CLI"
       command: "sudo npm install -g @devcontainers/cli"
-
-    - description: "Build and start the devcontainer defined in .devcontainer/"
-      command: 'devcontainer up --workspace-folder "$WORKSPACE_DIR" --remove-existing-container'
+      # `devcontainer up` is *not* run here: kit install commands fire as
+      # started-hooks, before the sandbox's Docker daemon is ready. The wrapper
+      # script `scripts/sandbox-up.sh` runs it via `sbx exec` after creation.
