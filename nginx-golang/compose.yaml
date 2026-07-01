@@ -1,4 +1,9 @@
 # Compose file reference: https://docs.docker.com/reference/compose-file/
+
+# `services` is the top-level element that declares each container in the
+# application. Every key under it is a service name that other services can
+# use as a DNS hostname on the project's default network.
+# https://docs.docker.com/reference/compose-file/services/
 services:
   # NGINX reverse proxy. The only service exposed to the host.
   proxy:
