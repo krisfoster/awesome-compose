@@ -156,19 +156,47 @@ Stop and remove the containers:
 $ docker compose down
 ```
 
-## Deploy to a local Kubernetes cluster with Compose Bridge
+## Deploy to Docker Desktop's Kubernetes cluster with Compose Bridge
 
-You can also convert this Compose project into a set of Kubernetes manifests
-and deploy them to a local [Kind](https://kind.sigs.k8s.io/) cluster running
-on Docker Desktop, using [Docker Compose Bridge](https://docs.docker.com/compose/bridge/).
+You can convert this Compose project into a set of Kubernetes manifests and
+deploy them to the Kubernetes cluster built into Docker Desktop, using
+[Docker Compose Bridge](https://docs.docker.com/compose/bridge/). Docker
+Desktop runs its Kubernetes cluster as a [Kind](https://kind.sigs.k8s.io/)
+cluster under the hood (visible as `Mode: kind` in `docker desktop kubernetes
+status`), so the standard `kind` CLI works against it directly and there is no
+separate cluster to create.
 
-Prerequisites: Docker Desktop, `kubectl`, and `kind` installed and on your
-`PATH`.
+Prerequisites: Docker Desktop, `kubectl`, and the `kind` CLI on your `PATH`
+(needed only for image loading in step 4).
 
-### 1. Build the backend image locally
+### 1. Enable Kubernetes in Docker Desktop
+
+Kubernetes has to be enabled once from the Docker Desktop UI:
+**Settings → Kubernetes → Enable Kubernetes → Apply & restart**. Docker
+Desktop doesn't currently expose an `enable` CLI flag for the Kubernetes
+feature, but once it's on you can drive it entirely from the command line.
+
+Verify:
+
+```
+$ docker desktop kubernetes status
+Field               Value
+State:              running
+Mode:               kind
+Version:            1.33.12
+Progress Message:   Kubernetes is up and running
+```
+
+Point kubectl at Docker Desktop's context:
+
+```
+$ kubectl config use-context docker-desktop
+```
+
+### 2. Build the backend image
 
 Compose Bridge references the images that Compose would use, so the backend
-image needs to exist on your host before you generate manifests:
+image needs to exist on your host first:
 
 ```
 $ docker compose build
@@ -176,7 +204,7 @@ $ docker compose build
 
 This produces a local image tagged `nginx-golang-backend:latest`.
 
-### 2. Generate the Kubernetes manifests
+### 3. Generate the Kubernetes manifests
 
 ```
 $ docker compose bridge convert -o out
@@ -195,28 +223,23 @@ out/
 │   ├── default-network-policy.yaml
 │   └── kustomization.yaml
 └── overlays/
-    └── desktop/                    # patches proxy-service to LoadBalancer;
-        ├── kustomization.yaml      # designed for Docker Desktop's built-in
-        └── proxy-service.yaml      # Kubernetes, not Kind
+    └── desktop/                    # patches proxy-service to LoadBalancer,
+        ├── kustomization.yaml      # which Docker Desktop binds to localhost
+        └── proxy-service.yaml
 ```
 
 Everything lands in a `nginx-golang` namespace, and the backend deployment
 references the `nginx-golang-backend` image with `imagePullPolicy: IfNotPresent`
 so the cluster uses the locally loaded image instead of trying to pull it.
 
-### 3. Create a Kind cluster
+### 4. Load the backend image into Docker Desktop's Kubernetes node
+
+Docker Desktop's Kubernetes nodes are Kind nodes, which do not automatically
+see images in your host's Docker daemon. Docker Desktop names its cluster
+`kind`, so load the image against that name:
 
 ```
-$ kind create cluster --name nginx-golang
-```
-
-### 4. Load the backend image into the Kind node
-
-Kind runs Kubernetes nodes as containers, and those nodes cannot see images
-in your host's Docker daemon. Load the built image explicitly:
-
-```
-$ kind load docker-image nginx-golang-backend:latest --name nginx-golang
+$ kind load docker-image nginx-golang-backend:latest --name kind
 ```
 
 The `proxy` service uses the public `nginx` image, which the node pulls from
@@ -224,42 +247,47 @@ Docker Hub on its own, so no manual load is needed for it.
 
 ### 5. Apply the manifests
 
-Use `base/`, not `overlays/desktop/`: the desktop overlay switches the proxy
-service to `type: LoadBalancer`, which stays `Pending` on Kind without an
-external load-balancer controller.
+Use the `desktop` overlay. It patches the proxy service to
+`type: LoadBalancer`, which Docker Desktop transparently binds to `localhost`:
 
 ```
-$ kubectl apply -k out/base
+$ kubectl apply -k out/overlays/desktop
 ```
 
-Verify the pods come up:
+Verify the pods and services come up:
 
 ```
-$ kubectl -n nginx-golang get pods
-NAME                       READY   STATUS    RESTARTS   AGE
-backend-xxxxxxxxxx-xxxxx   1/1     Running   0          10s
-proxy-xxxxxxxxxx-xxxxx     1/1     Running   0          10s
+$ kubectl -n nginx-golang get pods,svc
 ```
 
 ### 6. Access the app
 
-Port-forward the proxy's published service to your host:
+Because the proxy service is a `LoadBalancer` on Docker Desktop, the app is
+reachable directly on `localhost:80`:
+
+```
+$ curl localhost:80
+```
+
+You should see the same Docker whale ASCII banner as the Compose deployment.
+If port 80 is already in use on your host, `kubectl port-forward` still works
+as a fallback:
 
 ```
 $ kubectl -n nginx-golang port-forward svc/proxy-published 8080:80
 ```
 
-Then in another terminal:
-
-```
-$ curl localhost:8080
-```
-
-You should see the same Docker whale ASCII banner as the Compose deployment.
-
 ### 7. Tear down
 
+Remove the app:
+
 ```
-$ kubectl delete -k out/base
-$ kind delete cluster --name nginx-golang
+$ kubectl delete -k out/overlays/desktop
+```
+
+To wipe the whole Kubernetes cluster and start fresh (kept containers, volumes,
+and manifests are unaffected):
+
+```
+$ docker desktop kubernetes reset-cluster
 ```
