@@ -1,17 +1,40 @@
+# Compose file reference: https://docs.docker.com/reference/compose-file/
 services:
+  # NGINX reverse proxy. The only service exposed to the host.
   proxy:
+    # Official nginx image from Docker Hub; no custom Dockerfile needed.
     image: nginx
+
+    # Mount our config over nginx's default server block so the stock
+    # image uses it at startup. Edits on the host apply after a container
+    # restart (no rebuild required).
+    # https://docs.docker.com/reference/compose-file/services/#volumes
     volumes:
       - type: bind
-        source: ./proxy/nginx.conf
-        target: /etc/nginx/conf.d/default.conf
-        read_only: true
+        source: ./proxy/nginx.conf              # file on the host
+        target: /etc/nginx/conf.d/default.conf  # path inside the container
+        read_only: true                         # container cannot modify the file
+
+    # Publish container port 80 on host port 80 (HOST:CONTAINER).
+    # https://docs.docker.com/reference/compose-file/services/#ports
     ports:
       - 80:80
+
+    # Start `backend` before `proxy`. This only waits for the container to
+    # start, not for the Go server to be listening. For real readiness,
+    # add a healthcheck to `backend` and use `condition: service_healthy`.
+    # https://docs.docker.com/reference/compose-file/services/#depends_on
     depends_on:
       - backend
 
+  # Go HTTP server. Not published to the host; reachable only via `proxy`
+  # over Compose's default project network, using the service name `backend`.
   backend:
+    # Build from ./backend using the multi-stage Dockerfile.
+    # `target: builder` stops the build at the `builder` stage, so the
+    # resulting image includes the full Go toolchain. Drop `target` (or
+    # point it at the final stage) for a smaller production image.
+    # https://docs.docker.com/reference/compose-file/build/
     build:
       context: backend
       target: builder
