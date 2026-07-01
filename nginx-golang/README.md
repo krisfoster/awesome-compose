@@ -155,3 +155,111 @@ Stop and remove the containers:
 ```
 $ docker compose down
 ```
+
+## Deploy to a local Kubernetes cluster with Compose Bridge
+
+You can also convert this Compose project into a set of Kubernetes manifests
+and deploy them to a local [Kind](https://kind.sigs.k8s.io/) cluster running
+on Docker Desktop, using [Docker Compose Bridge](https://docs.docker.com/compose/bridge/).
+
+Prerequisites: Docker Desktop, `kubectl`, and `kind` installed and on your
+`PATH`.
+
+### 1. Build the backend image locally
+
+Compose Bridge references the images that Compose would use, so the backend
+image needs to exist on your host before you generate manifests:
+
+```
+$ docker compose build
+```
+
+This produces a local image tagged `nginx-golang-backend:latest`.
+
+### 2. Generate the Kubernetes manifests
+
+```
+$ docker compose bridge convert -o out
+```
+
+This writes a kustomize-style tree to `./out/`:
+
+```
+out/
+├── base/
+│   ├── 0-nginx-golang-namespace.yaml
+│   ├── backend-deployment.yaml
+│   ├── proxy-deployment.yaml
+│   ├── proxy-service.yaml          # ClusterIP for the published port
+│   ├── proxy-expose.yaml           # cluster-internal service
+│   ├── default-network-policy.yaml
+│   └── kustomization.yaml
+└── overlays/
+    └── desktop/                    # patches proxy-service to LoadBalancer;
+        ├── kustomization.yaml      # designed for Docker Desktop's built-in
+        └── proxy-service.yaml      # Kubernetes, not Kind
+```
+
+Everything lands in a `nginx-golang` namespace, and the backend deployment
+references the `nginx-golang-backend` image with `imagePullPolicy: IfNotPresent`
+so the cluster uses the locally loaded image instead of trying to pull it.
+
+### 3. Create a Kind cluster
+
+```
+$ kind create cluster --name nginx-golang
+```
+
+### 4. Load the backend image into the Kind node
+
+Kind runs Kubernetes nodes as containers, and those nodes cannot see images
+in your host's Docker daemon. Load the built image explicitly:
+
+```
+$ kind load docker-image nginx-golang-backend:latest --name nginx-golang
+```
+
+The `proxy` service uses the public `nginx` image, which the node pulls from
+Docker Hub on its own, so no manual load is needed for it.
+
+### 5. Apply the manifests
+
+Use `base/`, not `overlays/desktop/`: the desktop overlay switches the proxy
+service to `type: LoadBalancer`, which stays `Pending` on Kind without an
+external load-balancer controller.
+
+```
+$ kubectl apply -k out/base
+```
+
+Verify the pods come up:
+
+```
+$ kubectl -n nginx-golang get pods
+NAME                       READY   STATUS    RESTARTS   AGE
+backend-xxxxxxxxxx-xxxxx   1/1     Running   0          10s
+proxy-xxxxxxxxxx-xxxxx     1/1     Running   0          10s
+```
+
+### 6. Access the app
+
+Port-forward the proxy's published service to your host:
+
+```
+$ kubectl -n nginx-golang port-forward svc/proxy-published 8080:80
+```
+
+Then in another terminal:
+
+```
+$ curl localhost:8080
+```
+
+You should see the same Docker whale ASCII banner as the Compose deployment.
+
+### 7. Tear down
+
+```
+$ kubectl delete -k out/base
+$ kind delete cluster --name nginx-golang
+```
