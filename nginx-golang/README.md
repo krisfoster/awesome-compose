@@ -301,11 +301,15 @@ microVM, brings up the devcontainer inside it, and exposes a
 [VS Code tunnel](https://code.visualstudio.com/docs/remote/tunnels) URL you can
 open in a browser or attach VS Code Desktop to.
 
+**The sandbox uses the Claude base template** (`docker.io/library/acp-claude:latest`),
+which includes Claude Code pre-installed and running in unsafe mode. This provides
+full AI-assisted development capabilities within the isolated sandbox environment.
+
 Nesting when the sandbox is up:
 
 ```
-host  ->  sbx microVM  ->  devcontainer (Debian + Go + DinD)  ->  `code tunnel`
-                                                              \-> `docker compose up`
+host  ->  sbx microVM (Claude base)  ->  devcontainer (Debian + Go + DinD)  ->  `code tunnel`
+                  └-> Claude Code (unsafe mode)                            \-> `docker compose up`
 ```
 
 The full recipe lives in [`.sbx/spec.yaml`](.sbx/spec.yaml) (the sandbox kit)
@@ -344,6 +348,28 @@ $ docker compose up
 VS Code's port panel picks up the forwarded proxy port and offers a browser
 preview. Editing Go code triggers gopls in the container; nothing on your host
 is touched.
+
+### Using Claude Code in the sandbox
+
+The sandbox base layer includes Claude Code running in unsafe mode, providing
+AI-assisted development. You can access Claude Code directly from within the
+sandbox:
+
+```
+$ sbx exec nginx-golang -- claude
+```
+
+Or interact with it programmatically. Since it's running in unsafe mode, Claude
+has full access to the development environment and can:
+
+- Read and edit files
+- Run commands and tests
+- Install packages and dependencies
+- Work with Git operations
+- Execute Docker commands
+
+This provides a complete AI-powered development environment while maintaining
+isolation from your host system.
 
 ### Tear it down
 

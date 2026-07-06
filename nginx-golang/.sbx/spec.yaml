@@ -1,7 +1,7 @@
 # Docker Sandboxes kit for the nginx-golang sample.
 #
 # Bring-up in one command:
-#   sbx create --kit ./.sbx shell .
+#   sbx create --kit ./.sbx --template docker.io/library/acp-claude:latest shell .
 #
 # After the sandbox is created, the tunnel URL is written to /tmp/tunnel.log
 # inside the devcontainer. Read it with:
@@ -14,12 +14,16 @@
 schemaVersion: "2"
 kind: mixin
 name: nginx-golang-devcontainer
-displayName: "nginx-golang devcontainer bring-up"
+displayName: "nginx-golang devcontainer bring-up (Claude base)"
 description: |
+  Uses the Claude base sandbox template with Claude Code pre-installed.
   Installs the devcontainer CLI inside the sandbox, then builds and starts the
   devcontainer defined in .devcontainer/devcontainer.json against the mounted
   workspace. The devcontainer itself installs the `code` CLI and launches
   `code tunnel` so the sample can be edited from vscode.dev or VS Code Desktop.
+
+  Claude Code is available in the sandbox base layer running in unsafe mode,
+  providing full access to the development environment.
 
 environment:
   variables:
